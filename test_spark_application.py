@@ -2,7 +2,8 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 from pyspark.sql import DataFrame
 import pytest 
-from spark_aplication import Transformation
+from spark_aplication import ETL
+from datetime import date
 
 @pytest.fixture
 def stores_v1_file_path():
@@ -24,93 +25,91 @@ def products_file_path():
     return "products.json"
 
 @pytest.fixture
-def transformation_instance():
-    return Transformation()
+def ETL_instance():
+    return ETL()
 
 @pytest.fixture
-def stores_v1(transformation_instance: Transformation, stores_v1_file_path: str):
-    stores_schema =  T.StructType([
-        T.StructField("store_id",T.IntegerType(),True), 
-        T.StructField("country",T.StringType(),True), 
-        T.StructField("version",T.StringType(),True), 
-        ])
-    return transformation_instance.spark.read.schema(stores_schema).option("header", True).csv(stores_v1_file_path)
+def stores_v1(ETL_instance: ETL):
+    return ETL_instance.spark.createDataFrame([(10, "ES", "1"), (11, "ES", "1"), (12, "ES", "1")],
+                                                         "store_id int, country string, version string")
 
 @pytest.fixture
-def stores_v2(transformation_instance: Transformation, stores_v2_file_path: str):
-    stores_v2_schema =  T.StructType([
-        T.StructField("store_id",T.StringType(),True), 
-        T.StructField("version",T.StringType(),True), 
-        ])
-    return transformation_instance.spark.read.schema(stores_v2_schema).option("header", True).csv(stores_v2_file_path)
+def stores_v2(ETL_instance: ETL):
+    return ETL_instance.spark.createDataFrame([("ES13", "2"), ("ES14", "2")], 
+                                                         "store_id string, version string")
 
 @pytest.fixture
-def ticket_lines(transformation_instance: Transformation, ticket_line_file_path: str):
-    ticket_lines_schema =  T.StructType([
-        T.StructField("ticket_id",T.IntegerType(),True), 
-        T.StructField("product_id",T.IntegerType(),True), 
-        T.StructField("store_id",T.IntegerType(),True), 
-        T.StructField("date",T.DateType(),True), 
-        T.StructField("quantity",T.IntegerType(),True), 
-        ])
-    return transformation_instance.spark.read.schema(ticket_lines_schema).option("header", True).csv(ticket_line_file_path)
+def ticket_lines(ETL_instance: ETL):
+    return ETL_instance.spark.createDataFrame([(1, 1, 10, date(2023,3,3), 2),
+                                               (1, 2, 10, date(2023,3,3), 4), 
+                                               (1, 3, 10, date(2023,3,3), 1), 
+                                               (2, 1, 11, date(2023,3,3), 3), 
+                                               (2, 3, 11, date(2023,3,3), 5),
+                                               (3, 2, 14, date(2023,3,3), 1),
+                                               (3, 3, 14, date(2023,3,3), 3),
+                                               (4, 1, 12, date(2023,3,3), 4),
+                                               (5, 2, 12, date(2023,3,3), 3),
+                                               (6, 2, 13, date(2023,3,3), 2)],
+                                               "ticket_id int, product_id int, store_id int, date date, quantity int")
 
 @pytest.fixture
-def products(transformation_instance: Transformation, products_file_path: str):
-    products_schema = T.StructType([
-        T.StructField("product_id",T.IntegerType(),True), 
-        T.StructField("product_name",T.StringType(),True),
-        T.StructField("categories",T.ArrayType(T.StructType([
-            T.StructField("category_id", T.IntegerType(), True),
-            T.StructField("category_name", T.StringType(), True)
-            ])),True),
-        ])
-    return transformation_instance.spark.read.schema(products_schema).json(products_file_path)
+def products(ETL_instance: ETL):
+    return ETL_instance.spark.createDataFrame([(1, "Chocolate bar 70%", [(20, "Choco")]),
+                                                          (2, "Kinder Bueno", [(20, "Choco")]),
+                                                          (3, "Corn Flakes", [(20, "Cereal")])], 
+                                                         "product_id int, product_name string, categories array<struct<category_id: int, category_name: string>>")
 
-def test_lp_stores_v1(transformation_instance: Transformation, stores_v1: DataFrame):
+def test_lp_stores_v1(ETL_instance: ETL, stores_v1: DataFrame):
     stores_v1.printSchema()
     print(stores_v1.schema)
-    expected = [40,41,42,43,44,45]
-    result = transformation_instance.lp_stores(stores_v1)
+    expected = [10,11,12]
+    result = ETL_instance.lp_stores(stores_v1)
     assert expected == result
     
-def test_lp_stores_v2(transformation_instance: Transformation, stores_v2: DataFrame):
-    expected = [46,47]
-    result = transformation_instance.lp_stores(stores_v2)
+def test_lp_stores_v2(ETL_instance: ETL, stores_v2: DataFrame):
+    expected = [13,14]
+    result = ETL_instance.lp_stores(stores_v2)
     assert expected == result
     
-def test_total_stores_per_product(transformation_instance: Transformation, ticket_lines: DataFrame, stores_v1: DataFrame):
-    expected = transformation_instance.spark.createDataFrame([(1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 6), (7, 6), (8, 6), (9, 6), (10, 6)], 
-                                                             "product_id int, n_stores int")
-    result = transformation_instance.total_stores_per_product(ticket_lines=ticket_lines, stores=stores_v1).orderBy("product_id")
+def test_total_stores_per_product(ETL_instance: ETL, ticket_lines: DataFrame, stores_v1: DataFrame):
+    expected = ETL_instance.spark.createDataFrame([(1, 3), (2, 2), (3, 2)], 
+                                                  "product_id int, n_stores int")
+    result = ETL_instance.total_stores_per_product(ticket_lines=ticket_lines, stores=stores_v1).orderBy("product_id")
     assert expected.dtypes == result.dtypes
     assert expected.collect() == result.collect()
 
-def test_n_stores_per_product_v2(transformation_instance: Transformation, ticket_lines: DataFrame, stores_v2: DataFrame):
-    expected = transformation_instance.spark.createDataFrame([(1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2), (10, 2)], 
-                                                             "product_id int, n_stores int")
-    result = transformation_instance.total_stores_per_product(ticket_lines=ticket_lines, stores=stores_v2).orderBy("product_id")
+def test_n_stores_per_product_v2(ETL_instance: ETL, ticket_lines: DataFrame, stores_v2: DataFrame):
+    expected = ETL_instance.spark.createDataFrame([(2, 2), (3, 1)],
+                                                  "product_id int, n_stores int")
+    result = ETL_instance.total_stores_per_product(ticket_lines=ticket_lines, stores=stores_v2).orderBy("product_id")
     assert expected.dtypes == result.dtypes
     assert expected.collect() == result.collect()
 
-def test_second_most_selling_store_per_product(transformation_instance: Transformation, ticket_lines: DataFrame, stores_v1):
-    expected = transformation_instance.spark.createDataFrame([(1, 42), (2, 42), (2, 41), (3, 44), (4, 42), (5, 41), (6, 45), (6, 40), (7, 40), (8, 41), (9, 40), (10, 42)],
-                                                             "product_id int, second_store_id int")
-    result = transformation_instance.second_most_selling_store_per_product(ticket_lines=ticket_lines, stores=stores_v1)
+def test_second_most_selling_store_per_product(ETL_instance: ETL, ticket_lines: DataFrame, stores_v1):
+    expected = ETL_instance.spark.createDataFrame([(1, 11), (2, 12), (3, 10)],
+                                                  "product_id int, second_store_id int")
+    result = ETL_instance.second_most_selling_store_per_product(ticket_lines=ticket_lines, stores=stores_v1)
     assert expected.dtypes == result.dtypes
     assert expected.collect() == result.collect()
  
-def test_second_most_selling_store_per_product_v2(transformation_instance: Transformation, ticket_lines: DataFrame, stores_v2):
-    expected = transformation_instance.spark.createDataFrame([(1, 47), (2, 46), (3, 46), (3, 47), (4, 47), (5, 46), (6, 47), (7, 46), (7, 47), (8, 46), (9, 46), (10, 47)],
-                                                             "product_id int, second_store_id int")
-    result = transformation_instance.second_most_selling_store_per_product(ticket_lines=ticket_lines, stores=stores_v2)
-    result.show()
+def test_second_most_selling_store_per_product_v2(ETL_instance: ETL, ticket_lines: DataFrame, stores_v2):
+    expected = ETL_instance.spark.createDataFrame([(2, 14)],
+                                                  "product_id int, second_store_id int")
+    result = ETL_instance.second_most_selling_store_per_product(ticket_lines=ticket_lines, stores=stores_v2)
     assert expected.dtypes == result.dtypes
     assert expected.collect() == result.collect()
 
-def test_second_popular_stores_by_product_category(transformation_instance: Transformation, ticket_lines: DataFrame, products: DataFrame, stores_v1: DataFrame):
-    expected = transformation_instance.spark.createDataFrame([("Cereal", [42,40,41]),("Vegetables", [42,40]),("Dairy product", [42,44,41]),("Cookies", [45,40,41]),], 
-                                                             "category_name string, stores array<int>")
-    result = transformation_instance.second_popular_stores_by_product_category(ticket_lines=ticket_lines, products=products, stores=stores_v1)
+def test_second_popular_stores_by_product_category(ETL_instance: ETL, ticket_lines: DataFrame, products: DataFrame, stores_v1: DataFrame):
+    expected = ETL_instance.spark.createDataFrame([("Cereal", [10]), ("Choco", [12,11])], 
+                                                  "category_name string, stores array<int>")
+    result = ETL_instance.second_popular_stores_by_product_category(ticket_lines=ticket_lines, products=products, stores=stores_v1)
+    assert expected.dtypes == result.dtypes
+    assert expected.collect() == result.collect()
+
+
+def test_second_popular_stores_by_product_category(ETL_instance: ETL, ticket_lines: DataFrame, products: DataFrame, stores_v2: DataFrame):
+    expected = ETL_instance.spark.createDataFrame([("Choco", [14])],
+                                                  "category_name string, stores array<int>")
+    result = ETL_instance.second_popular_stores_by_product_category(ticket_lines=ticket_lines, products=products, stores=stores_v2)
     assert expected.dtypes == result.dtypes
     assert expected.collect() == result.collect()

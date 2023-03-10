@@ -1,0 +1,15 @@
+Answer of the question about productize the ETL.
+
+First of all, during the whole process of writing the code of the ETL I would use git as a version control system. 
+For that we could use Github, Bitbucket or similar tools. We would create a branch for every new feature
+we want to include in the project and a master branch.
+
+For automatically deploying the changes I would prepare a CI/CD pipeline in the cloud of preference. 
+We would set a trigger that whenever a new Pull Request is created for a feature, a set of unit and integration tests are run.
+It would also trigger a set of style and format checks such as black, pylint, etc in Python to unify the style through the team.
+When all checks and tests has run we could push the code into the master branch, so we would have our new feature 
+running in production. 
+
+Software regression would be prevent through the set of tests run over the code and having a contract for each layer of the data. 
+For that we would expect to have a high test coverage of the project, which the team should agree on. The team should also agree on how to
+set up the contracts and follow them.
