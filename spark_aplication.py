@@ -93,7 +93,9 @@ class ETL:
         stores_per_product = self.total_stores_per_product(ticket_lines, stores)
         second_store_per_product = self.second_most_selling_store_per_product(ticket_lines, stores)
         second_store_by_category = self.second_popular_stores_by_product_category(ticket_lines, products, stores)
-
+        stores_per_product.show()
+        second_store_per_product.show()
+        second_store_by_category.show()
     
 
 if __name__ == "__main__":
