@@ -1,7 +1,5 @@
-from pyspark.sql import functions as F
-from pyspark.sql import types as T
 from pyspark.sql import DataFrame
-import pytest 
+import pytest
 from spark_aplication import ETL
 from datetime import date
 
